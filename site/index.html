@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A股每日盘前策略 Word 与空间体系 Excel 下载">
+  <title>A股每日策略资料下载</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #2b2420;
+      --muted: #746b64;
+      --paper: #fffdf9;
+      --warm: #f8efe4;
+      --line: #eadbcd;
+      --accent: #8b1e1e;
+      --accent-dark: #6f1515;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: linear-gradient(180deg, #f7eee4 0, #fffaf4 260px, #fffdf9 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+    }
+
+    main {
+      width: min(760px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    header { margin-bottom: 28px; }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .08em;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--accent-dark);
+      font-size: clamp(30px, 7vw, 46px);
+      line-height: 1.18;
+    }
+
+    .intro {
+      margin: 20px 0 0;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 253, 249, .86);
+      color: var(--muted);
+    }
+
+    h2 { margin: 34px 0 14px; font-size: 21px; }
+
+    #reports,
+    #spreadsheets {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .report {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--paper);
+      box-shadow: 0 8px 24px rgba(83, 53, 35, .06);
+    }
+
+    .report-title { margin: 0; font-size: 17px; font-weight: 700; }
+    .report-meta { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+
+    .download {
+      flex: 0 0 auto;
+      display: inline-block;
+      padding: 10px 16px;
+      border-radius: 10px;
+      color: white;
+      background: var(--accent);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .download:hover, .download:focus-visible { background: var(--accent-dark); }
+    .status { color: var(--muted); }
+
+    footer {
+      margin-top: 34px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 560px) {
+      main { padding-top: 32px; }
+      .report { align-items: stretch; flex-direction: column; }
+      .download { text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">每日更新</p>
+      <h1>A股盘前策略</h1>
+      <p class="intro">这里仅提供每日 Word 策略和空间体系 Excel 下载，不展示策略原文、体系规则或内部分析过程。资料用于复盘与观察，不构成投资建议。</p>
+    </header>
+
+    <section aria-labelledby="reports-heading">
+      <h2 id="reports-heading">Word 报告</h2>
+      <p id="report-status" class="status">正在读取报告列表……</p>
+      <ul id="reports" aria-live="polite"></ul>
+    </section>
+
+    <section aria-labelledby="spreadsheets-heading">
+      <h2 id="spreadsheets-heading">空间体系 Excel</h2>
+      <p id="spreadsheet-status" class="status">正在读取表格列表……</p>
+      <ul id="spreadsheets" aria-live="polite"></ul>
+    </section>
+
+    <footer>候选不等于买入指令，请以盘中条件和风险控制为准。</footer>
+  </main>
+
+  <script>
+    const owner = "sininggong";
+    const repository = "a-shared-daily-strategy";
+    const branch = "main";
+    const api = `https://api.github.com/repos/${owner}/${repository}/git/trees/${branch}?recursive=1`;
+    const reportStatus = document.querySelector("#report-status");
+    const spreadsheetStatus = document.querySelector("#spreadsheet-status");
+    const reportList = document.querySelector("#reports");
+    const spreadsheetList = document.querySelector("#spreadsheets");
+
+    function reportLabel(path) {
+      const filename = path.split("/").pop().replace(/\.docx$/i, "");
+      const match = filename.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return match ? `${match[1]}年${Number(match[2])}月${Number(match[3])}日盘前策略` : filename;
+    }
+
+    function spreadsheetLabel(path) {
+      const filename = path.split("/").pop().replace(/\.xlsx$/i, "");
+      const match = filename.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return match ? `${match[1]}年${Number(match[2])}月${Number(match[3])}日空间体系表` : filename;
+    }
+
+    function renderFiles(files, list, status, labeler, formatName, buttonText) {
+      status.hidden = files.length > 0;
+      status.textContent = files.length ? "" : `暂时还没有可下载的${formatName}。`;
+
+      for (const file of files) {
+        const item = document.createElement("li");
+        item.className = "report";
+
+        const text = document.createElement("div");
+        const title = document.createElement("p");
+        title.className = "report-title";
+        title.textContent = labeler(file.path);
+        const meta = document.createElement("p");
+        meta.className = "report-meta";
+        meta.textContent = formatName;
+        text.append(title, meta);
+
+        const link = document.createElement("a");
+        link.className = "download";
+        link.href = `https://github.com/${owner}/${repository}/raw/refs/heads/${branch}/${file.path}`;
+        link.textContent = buttonText;
+        link.setAttribute("aria-label", `${buttonText}：${title.textContent}`);
+
+        item.append(text, link);
+        list.append(item);
+      }
+    }
+
+    fetch(api, { headers: { Accept: "application/vnd.github+json" } })
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then(data => {
+        const tree = data.tree || [];
+        const reports = tree
+          .filter(item => item.type === "blob" && /^reports\/.*\.docx$/i.test(item.path))
+          .sort((a, b) => b.path.localeCompare(a.path));
+        const spreadsheets = tree
+          .filter(item => item.type === "blob" && /^spreadsheets\/.*\.xlsx$/i.test(item.path))
+          .sort((a, b) => b.path.localeCompare(a.path));
+
+        renderFiles(reports, reportList, reportStatus, reportLabel, "Microsoft Word 文档", "下载 Word");
+        renderFiles(spreadsheets, spreadsheetList, spreadsheetStatus, spreadsheetLabel, "Microsoft Excel 工作簿", "下载 Excel");
+      })
+      .catch(() => {
+        reportStatus.hidden = false;
+        spreadsheetStatus.hidden = false;
+        reportStatus.textContent = "报告列表暂时无法读取，请稍后刷新页面。";
+        spreadsheetStatus.textContent = "表格列表暂时无法读取，请稍后刷新页面。";
+      });
+  </script>
+</body>
+</html>
+
